@@ -1,13 +1,15 @@
+from ultralytics import YOLO
 import cv2
-import numpy as np
 
-# ==============================
-# NHẬN DIỆN NGƯỜI BẰNG HOG + SVM
-# ==============================
-hog = cv2.HOGDescriptor()
-hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+# =====================================================
+# LOAD MODEL YOLO (COCO 80 classes)
+# YOLOv8n là bản nhẹ, chạy nhanh, phù hợp laptop
+# =====================================================
+model = YOLO("yolov8n.pt")  # sẽ tự tải nếu chưa có
 
-# Mở camera
+# =====================================================
+# MỞ CAMERA
+# =====================================================
 cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 800)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 600)
@@ -17,36 +19,55 @@ while True:
     if not ret:
         break
 
-    # Resize cho nhanh hơn
-    resize_frame = cv2.resize(frame, (640, 480))
+    # =================================================
+    # NHẬN DIỆN TRỰC TIẾP VỚI YOLO
+    # =================================================
+    results = model(frame, stream=True)
 
-    # ======================
-    # 1️⃣ Nhận diện người
-    # ======================
-    (rects, weights) = hog.detectMultiScale(resize_frame,
-                                            winStride=(8, 8),
-                                            padding=(8, 8),
-                                            scale=1.05)
+    # =================================================
+    # VẼ KẾT QUẢ LÊN MÀN HÌNH
+    # =================================================
+    for r in results:
+        for box in r.boxes:
+            # Lấy tọa độ bounding box
+            x1, y1, x2, y2 = box.xyxy[0]
 
-    # ======================
-    # Vẽ bounding box
-    # ======================
-    for (x, y, w, h) in rects:
-        cv2.rectangle(resize_frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-        cv2.putText(resize_frame, "Human", (x, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            # Độ chính xác
+            conf = float(box.conf[0])
 
-    # ======================
-    # Nếu không phát hiện người → đánh nhãn Object
-    # ======================
-    if len(rects) == 0:
-        cv2.putText(resize_frame, "Object detected (not human)", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            # Loại đối tượng (person, dog, cat, car,...)
+            cls = int(box.cls[0])
+            label = model.names[cls].upper()
 
-    cv2.imshow("NHAN DIEN NGUOI / VAT THE - HOG + SVM", resize_frame)
+            # Vẽ khung
+            cv2.rectangle(
+                frame,
+                (int(x1), int(y1)),
+                (int(x2), int(y2)),
+                (0, 255, 0),
+                2
+            )
 
+            # Vẽ nhãn
+            cv2.putText(
+                frame,
+                f"{label} {conf:.2f}",
+                (int(x1), int(y1) - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 255, 0),
+                2
+            )
+
+    # =================================================
+    # HIỂN THỊ CAMERA
+    # =================================================
+    cv2.imshow("NHAN DIEN DA DOI TUONG - YOLOv8", frame)
+
+    # Nhấn Q để thoát
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 cap.release()
 cv2.destroyAllWindows()
+   
